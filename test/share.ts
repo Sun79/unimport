@@ -35,21 +35,39 @@ export function functionWrapAddon(): Addon {
 export function resolverAddon(): Addon {
   return {
     name: 'resolver',
-    async matchImports(names, matched) {
+    matchImports(names, matched) {
       const dynamic: Import[] = []
+      const sideEffects: Import[] = []
+
       for (const name of names) {
+        const prevMatchedImport = matched.find(i => i.as === name)
+        if (prevMatchedImport) {
+          if ('sideEffects' in prevMatchedImport)
+            sideEffects.push(...(Array.isArray(prevMatchedImport.sideEffects) ? prevMatchedImport.sideEffects : [prevMatchedImport.sideEffects]))
+          continue
+        }
+
         if (!name.match(/^El[A-Z]/))
           continue
-        dynamic.push({
+        const matchedImport = {
           name,
           from: `element-plus/es`,
-        }, {
-          name: 'default',
-          as: '',
-          from: `element-plus/es/components/${kebabCase(name.slice(2))}/style/index`,
-        })
+          sideEffects: [{
+            name: 'default',
+            as: '',
+            from: `element-plus/es/components/${kebabCase(name.slice(2))}/style/index`,
+          }],
+        }
+        dynamic.push(matchedImport)
+        sideEffects.push(...matchedImport.sideEffects)
       }
-      return [...matched, ...dynamic]
+
+      if (dynamic.length) {
+        this.dynamicImports.push(...dynamic)
+        this.invalidate()
+      }
+
+      return [...matched, ...dynamic, ...sideEffects]
     },
   }
 }

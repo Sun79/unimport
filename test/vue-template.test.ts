@@ -1,7 +1,8 @@
+import type { Import } from '../src'
 import { describe, expect, it } from 'vitest'
 import { compileTemplate } from 'vue/compiler-sfc'
 import { createUnimport, vueTemplateAddon } from '../src'
-import { functionWrapAddon } from './share'
+import { functionWrapAddon, resolverAddon } from './share'
 
 const result = compileTemplate({
   id: 'template.vue',
@@ -49,8 +50,9 @@ describe('vue-template', () => {
       }"
     `)
     expect((await ctx.injectImports(result.code, 'a.vue')).code.toString()).toMatchInlineSnapshot(`
-      "import { foo as __unimport_foo } from 'foo';
-      import { unref as __unimport_unref_ } from 'vue';import { toDisplayString as _toDisplayString, createElementVNode as _createElementVNode, openBlock as _openBlock, createElementBlock as _createElementBlock, createCommentVNode as _createCommentVNode, Fragment as _Fragment } from "vue"
+      "import { unref as __unimport_unref_ } from 'vue';
+      import { foo as __unimport_foo } from 'foo';
+      import { toDisplayString as _toDisplayString, createElementVNode as _createElementVNode, openBlock as _openBlock, createElementBlock as _createElementBlock, createCommentVNode as _createCommentVNode, Fragment as _Fragment } from "vue"
 
       export function render(_ctx, _cache) {
         return (_openBlock(), _createElementBlock(_Fragment, null, [
@@ -104,10 +106,11 @@ describe('vue-template', () => {
     })
 
     expect((await ctx.injectImports(result.code, 'a.vue')).code.toString()).toMatchInlineSnapshot(`
-      "import { foo as _$___unimport_foo, unref as _$___unimport_unref_ } from 'vue';
+      "import { unref as _$___unimport_unref_, foo as _$___unimport_foo } from 'vue';
       import { __helper } from "helper"
-      const __unimport_foo = __helper(_$___unimport_foo)
       const __unimport_unref_ = __helper(_$___unimport_unref_)
+      const __unimport_foo = __helper(_$___unimport_foo)
+
       import { toDisplayString as _toDisplayString, createElementVNode as _createElementVNode, openBlock as _openBlock, createElementBlock as _createElementBlock, createCommentVNode as _createCommentVNode, Fragment as _Fragment } from "vue"
 
       export function render(_ctx, _cache) {
@@ -124,6 +127,55 @@ describe('vue-template', () => {
             onClick: _cache[0] || (_cache[0] = (...args) => (("foo" in _ctx ? _ctx.foo : __unimport_unref_(__unimport_foo)) && ("foo" in _ctx ? _ctx.foo : __unimport_unref_(__unimport_foo))(...args)))
           })
         ], 64 /* STABLE_FRAGMENT */))
+      }"
+    `)
+  })
+
+  it('matchImports', async () => {
+    const result = compileTemplate({
+      id: 'template.vue',
+      filename: 'template.vue',
+      source: `
+        <template>
+          <ElInput />
+          <component :is="ElInput" />
+          <component :is="ElSelect" />
+          <component :is="UndefinedComponent" />
+          {{ bar }}
+        </template
+      `,
+      compilerOptions: {
+        hoistStatic: false,
+      },
+    })
+
+    const ctx = createUnimport({
+      presets: ['vue'],
+      addons: {
+        addons: [
+          resolverAddon(),
+        ],
+        vueTemplate: true,
+      },
+    })
+
+    expect((await ctx.injectImports(result.code, 'a.vue')).code.toString()).toMatchInlineSnapshot(`
+      "import { unref as __unimport_unref_ } from 'vue';
+      import { ElInput as __unimport_ElInput, ElSelect as __unimport_ElSelect } from 'element-plus/es';
+      import 'element-plus/es/components/input/style/index';
+      import 'element-plus/es/components/select/style/index';
+      import { resolveComponent as _resolveComponent, createVNode as _createVNode, resolveDynamicComponent as _resolveDynamicComponent, openBlock as _openBlock, createBlock as _createBlock, toDisplayString as _toDisplayString, createTextVNode as _createTextVNode, createElementBlock as _createElementBlock } from "vue"
+
+      export function render(_ctx, _cache) {
+        const _component_ElInput = _resolveComponent("ElInput")
+
+        return (_openBlock(), _createElementBlock("template", null, [
+          _createVNode(_component_ElInput),
+          (_openBlock(), _createBlock(_resolveDynamicComponent(("ElInput" in _ctx ? _ctx.ElInput : __unimport_unref_(__unimport_ElInput))))),
+          (_openBlock(), _createBlock(_resolveDynamicComponent(("ElSelect" in _ctx ? _ctx.ElSelect : __unimport_unref_(__unimport_ElSelect))))),
+          (_openBlock(), _createBlock(_resolveDynamicComponent(_ctx.UndefinedComponent))),
+          _createTextVNode(" " + _toDisplayString(_ctx.bar), 1 /* TEXT */)
+        ]))
       }"
     `)
   })

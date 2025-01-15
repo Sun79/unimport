@@ -150,6 +150,20 @@ function createInternalContext(opts: Partial<UnimportOptions>) {
     getMetadata() {
       return metadata
     },
+    async hasMatchingImport(name) {
+      const map = await ctx.getImportMap()
+      const item = map.get(name)
+      if (item && !item.disabled)
+        return true
+
+      const identifiers = new Set([name])
+      for (const addon of ctx.addons) {
+        const matchedImports = await addon.matchImports?.call(ctx, identifiers, [])
+        if (matchedImports?.length)
+          return true
+      }
+      return false
+    },
     invalidate() {
       _combinedImports = undefined
     },

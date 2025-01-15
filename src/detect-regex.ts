@@ -12,9 +12,9 @@ export async function detectImportsRegex(
 ): Promise<DetectImportResult> {
   const s = getMagicString(code)
   // Strip comments so we don't match on them
-  const original = s.original
+  const modifiedCode = s.toString()
   const strippedCode = stripCommentsAndStrings(
-    original,
+    modifiedCode,
     // Do not strip comments if they are virtual import names
     options?.transformVirtualImports !== false && ctx.options.virtualImports?.length
       ? {

@@ -21,7 +21,7 @@ export async function detectImportsAcorn(
   const enableTransformVirtualImports = options?.transformVirtualImports !== false && ctx.options.virtualImports?.length
 
   if (enableAutoImport || enableTransformVirtualImports) {
-    const ast = parse(s.original, {
+    const ast = parse(s.toString(), {
       sourceType: 'module',
       ecmaVersion: 'latest',
       locations: true,

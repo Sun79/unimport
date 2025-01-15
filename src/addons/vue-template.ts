@@ -1,67 +1,83 @@
 import type { Addon, Import } from '../types'
-import { stringifyImports } from '../utils'
 
 const contextRE = /\b_ctx\.([$\w]+)\b/g
-const UNREF_KEY = '__unimport_unref_'
+const CONTEXT_VAR = '_ctx'
+const CONTEXT_PREFIX = `${CONTEXT_VAR}.`
+const UNIMPORT_PREFIX = '__unimport_'
+const UNREF_KEY = `${UNIMPORT_PREFIX}unref_`
 
 export const VUE_TEMPLATE_NAME = 'unimport:vue-template'
 
 export function vueTemplateAddon(): Addon {
   const self: Addon = {
     name: VUE_TEMPLATE_NAME,
-    async transform(s, id) {
-      if (!s.original.includes('_ctx.') || s.original.includes(UNREF_KEY))
+    extendImports(imports) {
+      return [...imports, {
+        name: 'unref',
+        from: 'vue',
+        as: UNREF_KEY,
+        dtsDisabled: true,
+      }]
+    },
+    async transform(s) {
+      if (!s.original.includes(CONTEXT_PREFIX) || s.original.includes(UNREF_KEY))
         return s
 
       const matches = Array.from(s.original.matchAll(contextRE))
-      const imports = await this.getImports()
-      let targets: Import[] = []
 
       for (const match of matches) {
         const name = match[1]
-        const item = imports.find(i => i.as === name)
-        if (!item)
+        const hasMatching = await this.hasMatchingImport(name)
+
+        if (!hasMatching)
           continue
 
         const start = match.index!
         const end = start + match[0].length
 
-        const tempName = `__unimport_${name}`
-        s.overwrite(start, end, `(${JSON.stringify(name)} in _ctx ? _ctx.${name} : ${UNREF_KEY}(${tempName}))`)
-        if (!targets.find(i => i.as === tempName)) {
-          targets.push({
-            ...item,
-            as: tempName,
-          })
-        }
-      }
-
-      if (targets.length) {
-        targets.push({
-          name: 'unref',
-          from: 'vue',
-          as: UNREF_KEY,
-        })
-
-        for (const addon of this.addons) {
-          if (addon === self)
-            continue
-
-          targets = await addon.injectImportsResolved?.call(this, targets, s, id) ?? targets
-        }
-
-        let injection = stringifyImports(targets)
-        for (const addon of this.addons) {
-          if (addon === self)
-            continue
-
-          injection = await addon.injectImportsStringified?.call(this, injection, targets, s, id) ?? injection
-        }
-
-        s.prepend(injection)
+        const tempName = `${UNIMPORT_PREFIX}${name}`
+        s.overwrite(start, end, `(${JSON.stringify(name)} in ${CONTEXT_VAR} ? ${CONTEXT_PREFIX}${name} : ${UNREF_KEY}(${tempName}))`)
       }
 
       return s
+    },
+    async matchImports(identifiers, matched) {
+      const map = await this.getImportMap()
+      const imports: Import[] = []
+      const unmatchedIdentifiers = new Set<string>()
+      let additionalMatched: Import[] = []
+
+      for (const name of identifiers) {
+        if (!name.startsWith(UNIMPORT_PREFIX) || name === UNREF_KEY)
+          continue
+
+        const originalName = name.slice(UNIMPORT_PREFIX.length)
+        let originalNameMatchedImport = matched.find(i => i.as === originalName)
+
+        if (!originalNameMatchedImport) {
+          // The matched import for the original name has already been added to the map when calling hasMatchingImport
+          originalNameMatchedImport = map.get(originalName)!
+          unmatchedIdentifiers.add(originalName)
+          additionalMatched.push(originalNameMatchedImport)
+        }
+
+        imports.push({
+          ...originalNameMatchedImport,
+          as: name,
+          dtsDisabled: true,
+        })
+      }
+
+      if (unmatchedIdentifiers.size) {
+        // matchImports need run again if the original name has not been matched previously
+        for (const addon of this.addons) {
+          if (addon !== self)
+            additionalMatched = await addon.matchImports?.call(this, unmatchedIdentifiers, additionalMatched) || additionalMatched
+        }
+        additionalMatched = additionalMatched.slice(unmatchedIdentifiers.size)
+      }
+
+      return [...matched, ...imports, ...additionalMatched]
     },
     async declaration(dts, options) {
       const imports = await this.getImports()

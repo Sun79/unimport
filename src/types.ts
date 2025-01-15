@@ -100,6 +100,8 @@ export interface UnimportContext {
   getImportMap: () => Promise<Map<string, Import>>
   getMetadata: () => UnimportMeta | undefined
 
+  hasMatchingImport: (name: string) => Promise<boolean>
+
   modifyDynamicImports: (fn: (imports: Import[]) => Thenable<void | Import[]>) => Promise<void>
   clearDynamicImports: () => void
   replaceImports: (imports: UnimportOptions['imports']) => Promise<Import[]>
